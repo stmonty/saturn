@@ -94,7 +94,7 @@ impl SaturnDB {
         Ok(())
     }
 
-    fn recover(&self, wal_path: &str) -> std::io::Result<()> {
+    pub fn recover(&self, wal_path: &str) -> std::io::Result<()> {
         let mut wal = WriteAheadLog::new(wal_path)?;
         let mut memtable = self.memtable.lock().unwrap();
         for entry in wal.iter() {
@@ -111,8 +111,60 @@ impl SaturnDB {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn create_saturndb() {
-    
+    #[test]
+    fn test_sdb_put_get() -> std::io::Result<()> {
+        let path = "/tmp/test_sdb_put_get";
+        let db = SaturnDB::new(path)?;
+
+        db.put(b"key1".to_vec(), b"value1".to_vec())?;
+        db.put(b"key2".to_vec(), b"value2".to_vec())?;
+
+        let val1 = db.get(&b"key1".to_vec())?;
+        let val2 = db.get(&b"key2".to_vec())?;
+        let val3 = db.get(&b"key3".to_vec())?;
+
+        assert_eq!(val1, Some(b"value1".to_vec()));
+        assert_eq!(val2, Some(b"value2".to_vec()));
+        assert_eq!(val3, None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_sdb_delete() -> std::io::Result<()> {
+        let path = "/tmp/test_sdb_delete";
+        let db = SaturnDB::new(path)?;
+
+        db.put(b"key1".to_vec(), b"value1".to_vec())?;
+        db.delete(b"key1".to_vec())?;
+
+        let val = db.get(&b"key1".to_vec())?;
+        assert_eq!(val, None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_sdb_recovery() -> std::io::Result<()> {
+        let path = "/tmp/test_sdb_recovery";
+
+        {
+            let db = SaturnDB::new(path)?;
+            db.put(b"key1".to_vec(), b"value1".to_vec())?;
+            db.put(b"key2".to_vec(), b"value2".to_vec())?;
+            db.delete(b"key1".to_vec())?;
+        }
+
+        let db = SaturnDB::new(path)?;
+        db.recover(path)?;
+
+        let val1 = db.get(&b"key1".to_vec())?;
+        let val2 = db.get(&b"key2".to_vec())?;
+
+        assert_eq!(val2, Some(b"value2".to_vec()));
+        assert_eq!(val1, None);
+        Ok(())
+    }
 }

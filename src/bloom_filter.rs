@@ -5,11 +5,20 @@ pub struct BloomFilter {
     size: usize,
 }
 
-impl BloomFilter {
-    pub fn new() -> Self {
+impl Default for BloomFilter {
+    fn default() -> Self {
         Self {
-            bit_array: vec![false; 1024], // Size can be adjusted
+            bit_array: vec![false; 1024],
             size: 1024,
+        }
+    }
+}
+
+impl BloomFilter {
+    pub fn new(size: usize) -> Self {
+        Self {
+            bit_array: vec![false; size],
+            size,
         }
     }
 
@@ -32,5 +41,54 @@ impl BloomFilter {
 
     fn hash2(&self, key: &Key) -> usize {
         key.iter().fold(0, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bloom_filter_basic() {
+        let mut bf = BloomFilter::default();
+        let key1 = b"alpha".to_vec();
+        let key2 = b"beta".to_vec();
+        let key3 = b"gamma".to_vec();
+
+        bf.add(&key1);
+        bf.add(&key2);
+        bf.add(&key3);
+
+        assert!(bf.contains(&key1));
+        assert!(bf.contains(&key2));
+        assert!(bf.contains(&key3));
+    }
+
+    #[test]
+    fn test_bloom_filter_add_and_contains() {
+        let mut bf = BloomFilter::default();
+        let keys: Vec<Key> = vec![
+            b"apple".to_vec(),
+            b"banana".to_vec(),
+            b"cherry".to_vec(),
+        ];
+
+        for key in &keys {
+            bf.add(key);
+        }
+
+        for key in &keys {
+            assert!(bf.contains(key), "Bloom Filter should contain {:?}", key);
+        }
+
+        let non_keys: Vec<Key> = vec![
+            b"durian".to_vec(),
+            b"elderberry".to_vec(),
+            b"fig".to_vec(),
+        ];
+
+        for key in &non_keys {
+            assert!(!bf.contains(key), "Bloom Filter should not contain {:?}", key);
+        }
     }
 }

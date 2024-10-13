@@ -89,3 +89,49 @@ pub fn read_bytes<R: Read>(reader: &mut R) -> Option<Vec<u8>> {
     }
     Some(buf)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+
+    #[test]
+    fn test_wal_append_and_iterate() -> std::io::Result<()> {
+        let path = Path::new("/tmp/test_wal_append_and_iterate");
+        File::create(&path).expect("File to be created properly");
+        
+        let mut wal = WriteAheadLog::new(path)?;
+
+        let put_entry = Entry::Put { key: b"key1".to_vec(), value: b"value1".to_vec(), };
+
+        let delete_entry = Entry::Delete { key: b"key2".to_vec() };
+
+        wal.append(&put_entry)?;
+        wal.append(&delete_entry)?;
+
+        let mut wal_reader = WriteAheadLog::new(path)?;
+
+        let mut iter = wal_reader.iter();
+
+        let entry1 = iter.next().unwrap();
+        match entry1 {
+            Entry::Put { key, value } => {
+                assert_eq!(key, b"key1");
+                assert_eq!(value, b"value1");
+            },
+            _ => panic!("Expected 'put entry' to exist."),
+        }
+
+        let entry2 = iter.next().unwrap();
+        match entry2 {
+            Entry::Delete { key } => {
+                assert_eq!(key, b"key2");
+            }
+            _ => panic!("Expected 'delete entry' to exist."),
+        }
+
+        assert!(iter.next().is_none());
+
+        Ok(())
+    }
+}
