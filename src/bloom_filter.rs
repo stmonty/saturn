@@ -1,14 +1,14 @@
 use crate::common::Key;
 
 pub struct BloomFilter {
-    bit_array: Vec<bool>,
+    bit_array: Vec<u8>,
     size: usize,
 }
 
 impl Default for BloomFilter {
     fn default() -> Self {
         Self {
-            bit_array: vec![false; 1024],
+            bit_array: vec![0; 1024],
             size: 1024,
         }
     }
@@ -17,7 +17,7 @@ impl Default for BloomFilter {
 impl BloomFilter {
     pub fn new(size: usize) -> Self {
         Self {
-            bit_array: vec![false; size],
+            bit_array: vec![0; size],
             size,
         }
     }
@@ -25,14 +25,14 @@ impl BloomFilter {
     pub fn add(&mut self, key: &Key) {
         let hash1 = self.hash1(key) % self.size;
         let hash2 = self.hash2(key) % self.size;
-        self.bit_array[hash1] = true;
-        self.bit_array[hash2] = true;
+        self.bit_array[hash1] = 1;
+        self.bit_array[hash2] = 1;
     }
 
     pub fn contains(&self, key: &Key) -> bool {
         let hash1 = self.hash1(key) % self.size;
         let hash2 = self.hash2(key) % self.size;
-        self.bit_array[hash1] && self.bit_array[hash2]
+        (self.bit_array[hash1] != 0) && (self.bit_array[hash2] != 0)
     }
 
     fn hash1(&self, key: &Key) -> usize {
