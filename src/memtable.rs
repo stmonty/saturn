@@ -2,8 +2,16 @@ use std::collections::BTreeMap;
 
 use crate::common::{Key, Value, SequenceNumber};
 
-pub struct MemTable {
-    pub map: BTreeMap<Key, (Value, SequenceNumber)>,
+pub trait MemTableBackend {
+    fn insert(&mut self, key: Key, val: (Value, SequenceNumber));
+    fn remove(&mut self, key: &Key) -> Option<(Value, SequenceNumber)>;
+    fn get(&self, key: &Key) -> Option<&(Value, SequenceNumber)>;
+    fn len(&self) -> usize;
+    fn flush(&mut self);
+}
+
+pub struct MemTable<Backend: MemTableBackend> {
+    map: Backend,
     pub tombstones: BTreeMap<Key, SequenceNumber>,
     pub current_sequence_number: SequenceNumber,
 }
