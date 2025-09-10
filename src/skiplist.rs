@@ -1,4 +1,5 @@
 use crate::common::{Key, Value};
+use crate::comparator::{Comp};
 
 struct Node {
     skips: Vec<Option<*mut Node>>,
@@ -6,3 +7,6 @@ struct Node {
     key: Key,
     value: Value,
 }
+
+
+impl SkipListLevel<C: Comp>

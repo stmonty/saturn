@@ -7,3 +7,4 @@ description = "An Embedded Key-Value Database!"
 repository = "https://github.com/stmonty/saturn"
 
 [dependencies]
+rand = "0.9.0"
