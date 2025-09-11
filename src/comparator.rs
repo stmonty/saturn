@@ -1,14 +1,6 @@
 use std::cmp::Ordering;
 
 /// A `Comparator` trait defines a total ordering over a set of keys.
-///
-/// LSM-style storage engines use comparators to maintain the sorted order of keys
-/// within their internal data structures (like memtables and SSTables). This allows
-/// for efficient searching, merging, and range scans.
-///
-/// Beyond simple key comparison, this trait includes methods for creating
-/// compact keys, which are crucial for reducing the storage overhead of indexes
-/// in SSTables.
 pub trait Comparator: Send + Sync + 'static {
     /// Compares two key slices.
     ///
