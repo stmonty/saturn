@@ -2,6 +2,7 @@ pub type Key = Vec<u8>;
 pub type Value = Vec<u8>;
 pub type SequenceNumber = u64;
 
+#[derive(Debug, Clone)]
 pub struct SegmentHandle {
     offset: usize,
     length: usize,
@@ -66,7 +67,9 @@ impl SegmentHandle {
     pub fn length(&self) -> usize {
         self.length
     }
-
+    
+    /// Encodes the SegmentHandle as varint into `dest`.
+    /// Returns bytes written or 0 if `dest` is too small.
     pub fn encode(&self, dest: &mut [u8]) -> usize {
         if dest.len() < required_space(self.offset) + required_space(self.length) {
             return 0;
@@ -75,11 +78,13 @@ impl SegmentHandle {
         offset + encode_var(self.length, &mut dest[offset..])
     }
 
+    /// Decodes a SegmentHandle from a varint-encoded byte slice.
+    /// Returns (SegmentHandle, bytes_read) or None on failure.
     pub fn decode(from: &[u8]) -> Option<(SegmentHandle, usize)> {
-        let (offset, offset_size) = decode_var(from)?;
-        let (length, length_size) = decode_var(&from[offset_size..])?;
+        let (offset, offset_len) = decode_var(from)?;
+        let (length, length_len) = decode_var(&from[offset_len..])?;
 
-        Some((SegmentHandle {offset, length}, offset_size + length_size))
+        Some((SegmentHandle {offset, length}, offset_len + length_len))
     }
 
 }
