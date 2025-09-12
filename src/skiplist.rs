@@ -35,49 +35,70 @@ impl<T> Node<T> {
     }
 }
 
-pub struct SkipList<T> {
+pub struct SkipList<T: AsRef<[u8]> + Clone> {
     head: Rc<RefCell<Node<T>>>,
     level: usize,
     comparator: Arc<dyn Comparator>,
     rng: rand::rngs::ThreadRng,
 }
 
-impl<T> SkipList<T>
-where T: AsRef<[u8]>
+impl<T: AsRef<[u8]> + Clone> SkipList<T>
 {
     pub fn new(comparator: Arc<dyn Comparator>) -> Self {
-        SkipList { head: Rc::new(RefCell::new(Node::new_head())), level: 1, comparator: comparator, rng: rand::thread_rng() }
+        SkipList { head: Rc::new(RefCell::new(Node::new_head())), level: 1, comparator: comparator, rng: rand::rng() }
     }
 
     fn random_level(&mut self) -> usize {
         let mut level = 1;
-        while self.rng.gen::<f64>() < P && level < MAX_LEVEL {
+        while self.rng.random::<f64>() < P && level < MAX_LEVEL {
             level += 1;
         }
         level
     }
-
+       /// Inserts an element into the skip list.
+    /// If an element with an equivalent key already exists, it is not overwritten.
+    /// The new element is inserted according to the comparator's ordering.
     pub fn insert(&mut self, element: T) {
         let mut update = vec![Rc::clone(&self.head); MAX_LEVEL];
-        let current = Rc::clone(&self.head);
+        let mut current = Rc::clone(&self.head);
 
+        // Traverse from the top level down to find the insertion point at each level.
         for i in (0..self.level).rev() {
-            while let Some(next_node) = current.borrow().next[i].clone() {
-                let next_element = next_node.borrow().element.as_ref().unwrap();
-                if self.comparator.compare(next_element.as_ref(), element.as_ref()) == Ordering::Less {
-                    current = next_node;
-                } else {
-                    break;
+            loop {
+                let next_node_link = current.borrow().next[i].clone();
+
+                match next_node_link {
+                    Some(ref next_node) => {
+                        // Bind the borrow guard to a variable. Its lifetime now extends for this entire scope.
+                        let next_node_guard = next_node.borrow();
+                        // This reference is now valid because `next_node_guard` is still alive.
+                        let next_element = next_node_guard.element.as_ref().unwrap();
+                        
+                        if self.comparator.compare(next_element.as_ref(), element.as_ref()) == Ordering::Less {
+                            // Advance `current`. This is safe.
+                            current = Rc::clone(next_node);
+                        } else {
+                            // Found insertion point for this level.
+                            break;
+                        }
+                    }
+                    None => {
+                        // Reached the end of the list at this level.
+                        break;
+                    }
                 }
             }
             update[i] = Rc::clone(&current);
         }
 
+        // Determine the level for the new node.
         let new_level = self.random_level();
         if new_level > self.level {
+            // If the new node is taller than the current list, update the list's level.
             self.level = new_level;
         }
 
+        // Create and splice the new node into the list.
         let new_node = Rc::new(RefCell::new(Node::new(element, new_level)));
         for i in 0..new_level {
             new_node.borrow_mut().next[i] = update[i].borrow_mut().next[i].take();
@@ -86,43 +107,56 @@ where T: AsRef<[u8]>
     }
 
     /// Searches for an element with the given key.
-    /// Returns a reference to the element if found.
-    pub fn get(&self, key: &[u8]) -> Option<T>
-    where
-        T: Clone,
-    {
+    /// Returns a clone of the element if found.
+    pub fn get(&self, key: &[u8]) -> Option<T> {
         let mut current = Rc::clone(&self.head);
+        // Traverse from the top level down, getting as close as possible to the key.
         for i in (0..self.level).rev() {
-            while let Some(next_node) = current.borrow().next[i].clone() {
-                let next_element = next_node.borrow().element.as_ref().unwrap();
-                match self.comparator.compare(next_element.as_ref(), key) {
-                    Ordering::Less => {
-                        current = next_node;
+            loop {
+                let next_node_link = current.borrow().next[i].clone();
+
+                match next_node_link {
+                    Some(ref next_node) => {
+                        // Bind the borrow guard to a variable to extend its lifetime.
+                        let next_node_guard = next_node.borrow();
+                        // This reference is valid as long as `next_node_guard` is in scope.
+                        let next_element = next_node_guard.element.as_ref().unwrap();
+
+                        if self.comparator.compare(next_element.as_ref(), key) == Ordering::Less {
+                            // Advance `current`.
+                            current = Rc::clone(next_node);
+                        } else {
+                            // Key is >= next_element, so drop down.
+                            break;
+                        }
                     }
-                    _ => break,
+                    None => {
+                        // Reached the end of the list at this level.
+                        break;
+                    }
                 }
             }
         }
 
         // After the search, `current` is the predecessor of the potential match.
-        // We need to check the next node at the bottom level.
+        // We need to check the next node at the bottom level (level 0).
         if let Some(next_node) = current.borrow().next[0].clone() {
-            let element = next_node.borrow().element.as_ref().unwrap();
-            if self.comparator.compare(element.as_ref(), key) == Ordering::Equal {
-                return Some(element.clone());
+            let next_node_guard = next_node.borrow();
+            let next_element = next_node_guard.element.as_ref().unwrap();
+            if self.comparator.compare(next_element.as_ref(), key) == Ordering::Equal {
+                return Some(next_element.clone());
             }
         }
 
         None
     }
 
-    /// Returns an iterator over the elements of the skip list.
     pub fn iter(&self) -> SkipListIterator<T> {
-        SkipListIterator {
-            current: self.head.borrow().next[0].clone(),
-        }
+        SkipListIterator { current: self.head.borrow().next[0].clone() }
     }
+
 }
+
 
 /// An iterator for the `SkipList`.
 pub struct SkipListIterator<T> {
@@ -146,7 +180,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::comparator::{BytewiseComparator, Comparator};
+    use super::*;
+    use crate::common::{Key, SequenceNumber};
+    use crate::comparator::{BytewiseComparator};
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct InternalKey {
@@ -219,8 +255,6 @@ mod tests {
         let comparator = Arc::new(BytewiseComparator::new());
         let mut list = SkipList::new(comparator);
 
-        // In LevelDB/RocksDB, newer keys (with higher sequence numbers)
-        // are inserted first. The SkipList stores both.
         list.insert(InternalKey::new(b"key1", 2));
         list.insert(InternalKey::new(b"key1", 1));
 
