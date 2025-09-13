@@ -10,8 +10,8 @@ pub trait MemTableBackend {
     fn flush(&mut self);
 }
 
-pub struct MemTable<Backend: MemTableBackend> {
-    map: Backend,
+pub struct MemTable {
+    map: BTreeMap<Key, (Value, SequenceNumber)>,
     pub tombstones: BTreeMap<Key, SequenceNumber>,
     pub current_sequence_number: SequenceNumber,
 }
