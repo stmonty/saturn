@@ -1,11 +1,10 @@
-use crate::comparator::Comparator;
 use crate::common::{Key, Value};
-use std::ptr;
+use crate::comparator::Comparator;
 use rand::Rng;
 use std::cmp::Ordering;
-use std::sync::Arc;
 use std::marker::PhantomData;
-
+use std::ptr;
+use std::sync::Arc;
 
 /// The maximum number of levels in the skip list.
 /// This limits the number of elements to (1/P)^MAX_LEVEL.
@@ -24,9 +23,12 @@ struct Node {
 }
 
 impl Node {
-
     pub fn new(key: Key, value: Value, level: usize) -> Self {
-        Node { key: key, val: value , next: vec![ptr::null_mut(); level] }
+        Node {
+            key: key,
+            val: value,
+            next: vec![ptr::null_mut(); level],
+        }
     }
 }
 
@@ -37,8 +39,7 @@ pub struct SkipList {
     rng: rand::rngs::ThreadRng,
 }
 
-impl SkipList
-{
+impl SkipList {
     pub fn new(comparator: Arc<dyn Comparator>) -> Self {
         // The head node can now be a regular node with empty key/value pairs.
         let head_node = Box::new(Node::new(Vec::new(), Vec::new(), MAX_LEVEL));
@@ -86,8 +87,8 @@ impl SkipList
             let new_node = Box::into_raw(Box::new(Node::new(key, value, new_level)));
 
             for i in 0..new_level {
-                (&mut(*new_node)).next[i] = (&(*update[i])).next[i];
-                (&mut(*update[i])).next[i] = new_node;
+                (&mut (*new_node)).next[i] = (&(*update[i])).next[i];
+                (&mut (*update[i])).next[i] = new_node;
             }
         }
     }
@@ -138,7 +139,6 @@ impl Drop for SkipList {
     }
 }
 
-
 pub struct SkipListIterator<'a> {
     current: Link,
     _phantom: PhantomData<&'a Node>,
@@ -146,7 +146,7 @@ pub struct SkipListIterator<'a> {
 
 impl<'a> Iterator for SkipListIterator<'a> {
     type Item = (&'a Key, &'a Value);
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.current.is_null() {
             None
@@ -159,7 +159,6 @@ impl<'a> Iterator for SkipListIterator<'a> {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -210,20 +209,20 @@ mod tests {
         let comparator = Arc::new(BytewiseComparator::new());
         let mut list = SkipList::new(comparator);
 
-        list.insert(b"key1".to_vec(), b"value2".to_vec());
-        list.insert(b"key1".to_vec(), b"value1".to_vec());
+        // Insert two duplicates: the later insert should come first among equals.
+        list.insert(b"key1".to_vec(), b"value2".to_vec()); // older
+        list.insert(b"key1".to_vec(), b"value1".to_vec()); // newer
 
         let collected: Vec<_> = list.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         assert_eq!(collected.len(), 2);
 
-        // The comparator only sees "key1", so insertion order is maintained for equal keys.
-        // The first one inserted ("value2") should be found first.
-        assert_eq!(collected[0], (b"key1".to_vec(), b"value2".to_vec()));
-        assert_eq!(collected[1], (b"key1".to_vec(), b"value1".to_vec()));
-        
-        // `get` should find the first inserted item for a given key.
+        // Among equal keys, iteration shows newest first (LIFO for duplicates).
+        assert_eq!(collected[0], (b"key1".to_vec(), b"value1".to_vec()));
+        assert_eq!(collected[1], (b"key1".to_vec(), b"value2".to_vec()));
+
+        // get() returns the most recent value for the key (last-writer-wins).
         let val = list.get(b"key1").unwrap();
-        assert_eq!(*val, b"value2".to_vec());
+        assert_eq!(*val, b"value1".to_vec());
     }
 
     #[test]
