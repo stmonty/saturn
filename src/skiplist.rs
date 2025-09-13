@@ -159,3 +159,93 @@ impl<'a> Iterator for SkipListIterator<'a> {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::comparator::BytewiseComparator;
+
+    #[test]
+    fn test_insert_and_get() {
+        let comparator = Arc::new(BytewiseComparator::new());
+        let mut list = SkipList::new(comparator);
+
+        list.insert(b"apple".to_vec(), b"red".to_vec());
+        list.insert(b"banana".to_vec(), b"yellow".to_vec());
+        list.insert(b"cherry".to_vec(), b"dark red".to_vec());
+
+        // Test successful gets
+        let banana_val = list.get(b"banana").unwrap();
+        assert_eq!(*banana_val, b"yellow".to_vec());
+
+        let apple_val = list.get(b"apple").unwrap();
+        assert_eq!(*apple_val, b"red".to_vec());
+
+        // Test unsuccessful get
+        assert!(list.get(b"grape").is_none());
+    }
+
+    #[test]
+    fn test_iterator_order() {
+        let comparator = Arc::new(BytewiseComparator::new());
+        let mut list = SkipList::new(comparator);
+
+        list.insert(b"zulu".to_vec(), b"4".to_vec());
+        list.insert(b"alpha".to_vec(), b"1".to_vec());
+        list.insert(b"bravo".to_vec(), b"2".to_vec());
+        list.insert(b"x-ray".to_vec(), b"3".to_vec());
+
+        let results: Vec<_> = list.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+        assert_eq!(results.len(), 4);
+        assert_eq!(results[0], (b"alpha".to_vec(), b"1".to_vec()));
+        assert_eq!(results[1], (b"bravo".to_vec(), b"2".to_vec()));
+        assert_eq!(results[2], (b"x-ray".to_vec(), b"3".to_vec()));
+        assert_eq!(results[3], (b"zulu".to_vec(), b"4".to_vec()));
+    }
+
+    #[test]
+    fn test_duplicates_are_inserted() {
+        let comparator = Arc::new(BytewiseComparator::new());
+        let mut list = SkipList::new(comparator);
+
+        list.insert(b"key1".to_vec(), b"value2".to_vec());
+        list.insert(b"key1".to_vec(), b"value1".to_vec());
+
+        let collected: Vec<_> = list.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        assert_eq!(collected.len(), 2);
+
+        // The comparator only sees "key1", so insertion order is maintained for equal keys.
+        // The first one inserted ("value2") should be found first.
+        assert_eq!(collected[0], (b"key1".to_vec(), b"value2".to_vec()));
+        assert_eq!(collected[1], (b"key1".to_vec(), b"value1".to_vec()));
+        
+        // `get` should find the first inserted item for a given key.
+        let val = list.get(b"key1").unwrap();
+        assert_eq!(*val, b"value2".to_vec());
+    }
+
+    #[test]
+    fn test_empty_list() {
+        let comparator = Arc::new(BytewiseComparator::new());
+        let list = SkipList::new(comparator);
+
+        assert!(list.get(b"any_key").is_none());
+        assert_eq!(list.iter().count(), 0);
+    }
+
+    #[test]
+    fn test_drop_no_leaks() {
+        // This test simply creates and drops a list with many items.
+        // Running this with a tool like `valgrind` would confirm no memory is leaked.
+        let comparator = Arc::new(BytewiseComparator::new());
+        let mut list = SkipList::new(comparator);
+        for i in 0..1000 {
+            let key = format!("key{}", i);
+            let val = format!("val{}", i);
+            list.insert(key.into_bytes(), val.into_bytes());
+        }
+        // `list` is dropped here automatically, and our `Drop` implementation is called.
+    }
+}
