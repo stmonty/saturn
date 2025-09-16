@@ -210,8 +210,8 @@ mod tests {
         let mut list = SkipList::new(comparator);
 
         // Insert two duplicates: the later insert should come first among equals.
-        list.insert(b"key1".to_vec(), b"value2".to_vec()); // older
-        list.insert(b"key1".to_vec(), b"value1".to_vec()); // newer
+        list.insert(b"key1".to_vec(), b"value2".to_vec());
+        list.insert(b"key1".to_vec(), b"value1".to_vec());
 
         let collected: Vec<_> = list.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         assert_eq!(collected.len(), 2);
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn test_drop_no_leaks() {
         // This test simply creates and drops a list with many items.
-        // Running this with a tool like `valgrind` would confirm no memory is leaked.
+        // Running this with a tool like `valgrind` should confirm no memory is leaked.
         let comparator = Arc::new(BytewiseComparator::new());
         let mut list = SkipList::new(comparator);
         for i in 0..1000 {
@@ -245,6 +245,6 @@ mod tests {
             let val = format!("val{}", i);
             list.insert(key.into_bytes(), val.into_bytes());
         }
-        // `list` is dropped here automatically, and our `Drop` implementation is called.
+        // Drop
     }
 }
