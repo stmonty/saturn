@@ -45,4 +45,31 @@ pub mod crc32c {
         let rot = masked.wrapping_sub(0xA282_EAD8);
         (rot << 15) | (rot >> 17)
     }
+
+    #[inline]
+    pub fn get_fixed32_le(src4: &[u8]) -> u32 {
+        // src4 must be at least 4 bytes long; callers pass header[0..4].
+        // Little-endian decode: b0 + b1<<8 + b2<<16 + b3<<24
+        (src4[0] as u32)
+            | ((src4[1] as u32) << 8)
+            | ((src4[2] as u32) << 16)
+            | ((src4[3] as u32) << 24)
+    }
+
+    #[inline]
+    pub fn put_fixed32_le(dst4: &mut [u8], v: u32) {
+        dst4[0] = (v & 0xFF) as u8;
+        dst4[1] = ((v >> 8) & 0xFF) as u8;
+        dst4[2] = ((v >> 16) & 0xFF) as u8;
+        dst4[3] = ((v >> 24) & 0xFF) as u8;
+    }
+}
+
+#[test]
+fn fixed32_roundtrip() {
+    let n = 0xA1B2_C3D4u32;
+    let mut b = [0u8; 4];
+    crc32c::put_fixed32_le(&mut b, n);
+    assert_eq!(crc32c::get_fixed32_le(&b), n);
+    assert_eq!(u32::from_le_bytes(b), n);
 }
