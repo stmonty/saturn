@@ -22,7 +22,7 @@ pub fn encode_var(mut n: usize, dest: &mut [u8]) -> usize {
         } else {
             return 0;
         }
-        if n == 0  {
+        if n == 0 {
             break;
         }
     }
@@ -57,7 +57,10 @@ pub fn decode_var(src: &[u8]) -> Option<(usize, usize)> {
 
 impl SegmentHandle {
     pub fn new(offset: usize, length: usize) -> Self {
-        SegmentHandle { offset: offset, length: length }
+        SegmentHandle {
+            offset: offset,
+            length: length,
+        }
     }
 
     pub fn offset(&self) -> usize {
@@ -67,7 +70,7 @@ impl SegmentHandle {
     pub fn length(&self) -> usize {
         self.length
     }
-    
+
     /// Encodes the SegmentHandle as varint into `dest`.
     /// Returns bytes written or 0 if `dest` is too small.
     pub fn encode(&self, dest: &mut [u8]) -> usize {
@@ -84,11 +87,11 @@ impl SegmentHandle {
         let (offset, offset_len) = decode_var(from)?;
         let (length, length_len) = decode_var(&from[offset_len..])?;
 
-        Some((SegmentHandle {offset, length}, offset_len + length_len))
+        Some((SegmentHandle { offset, length }, offset_len + length_len))
     }
-
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
     Put { key: Key, value: Value },
     Delete { key: Key },

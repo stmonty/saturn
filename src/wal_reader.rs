@@ -101,13 +101,11 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
                     }
                     continue;
                 }
-                Outcome::Rec { typ, data } => {
-                    // compute physical record start offset
-                    let phys_off = self.end_of_buffer_offset
-                        - self.buf.size() as u64
-                        - HEADER_SIZE as u64
-                        - data.len() as u64;
-
+                Outcome::Rec {
+                    typ,
+                    data,
+                    physical_offset,
+                } => {
                     if self.resyncing {
                         if typ == RecordType::Middle as u8 {
                             continue;
@@ -124,9 +122,8 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
                             if in_frag && !scratch.is_empty() {
                                 self.report(scratch.len() as u64, "partial record without end(1)");
                             }
-                            prospective_offset = phys_off;
-                            out.clear();
-                            out.extend_from_slice(data);
+                            prospective_offset = physical_offset;
+                            *out = data;
                             self.last_record_offset = prospective_offset;
                             return Ok(true);
                         }
@@ -134,9 +131,8 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
                             if in_frag && !scratch.is_empty() {
                                 self.report(scratch.len() as u64, "partial record without end(2)");
                             }
-                            prospective_offset = phys_off;
-                            scratch.clear();
-                            scratch.extend_from_slice(data);
+                            prospective_offset = physical_offset;
+                            scratch = data;
                             in_frag = true;
                         }
                         t if t == RecordType::Middle as u8 => {
@@ -146,7 +142,7 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
                                     "missing start of fragmented record(1)",
                                 );
                             } else {
-                                scratch.extend_from_slice(data);
+                                scratch.extend_from_slice(&data);
                             }
                         }
                         t if t == RecordType::Last as u8 => {
@@ -156,9 +152,8 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
                                     "missing start of fragmented record(2)",
                                 );
                             } else {
-                                scratch.extend_from_slice(data);
-                                out.clear();
-                                out.extend_from_slice(&scratch);
+                                scratch.extend_from_slice(&data);
+                                *out = std::mem::take(&mut scratch);
                                 self.last_record_offset = prospective_offset;
                                 return Ok(true);
                             }
@@ -196,7 +191,7 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
         Ok(true)
     }
 
-    fn read_physical_record<'a>(&'a mut self) -> io::Result<Outcome<'a>> {
+    fn read_physical_record(&mut self) -> io::Result<Outcome> {
         loop {
             if self.buf.size() < HEADER_SIZE {
                 if !self.eof {
@@ -235,9 +230,11 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
                 return Ok(Outcome::Bad);
             }
 
+            let payload_slice = &self.buf.as_slice()[HEADER_SIZE..HEADER_SIZE + len];
+
             if self.checksum {
-                let expected = crc32c::unmask(get_fixed32_le(&header[0..4]));
-                let actual = crc32c::value(&header[6..6 + 1 + len]);
+                let expected = crc32c::unmask(crc32c::get_fixed32_le(&header[0..4]));
+                let actual = crc32c::extend(crc32c::value(&[typ]), payload_slice);
                 if actual != expected {
                     let drop_sz = self.buf.size() as u64;
                     self.buf.clear();
@@ -246,19 +243,22 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
                 }
             }
 
-            let payload = &self.buf.as_slice()[HEADER_SIZE..HEADER_SIZE + len];
+            let payload = payload_slice.to_vec();
             self.buf.remove_prefix(HEADER_SIZE + len);
+            let remaining = self.buf.size() as u64;
 
             // Skip physical record that started before initial_offset
-            let started_at = self.end_of_buffer_offset
-                - self.buf.size() as u64
-                - HEADER_SIZE as u64
-                - len as u64;
+            let started_at =
+                self.end_of_buffer_offset - remaining - HEADER_SIZE as u64 - len as u64;
             if started_at < self.initial_offset {
                 return Ok(Outcome::Bad);
             }
 
-            return Ok(Outcome::Rec { typ, data: payload });
+            return Ok(Outcome::Rec {
+                typ,
+                data: payload,
+                physical_offset: started_at,
+            });
         }
     }
 
@@ -283,16 +283,20 @@ impl<R: Read + Seek, Rep: Reporter> Reader<R, Rep> {
     }
 }
 
-enum Outcome<'a> {
+enum Outcome {
     Eof,
     Bad,
-    Rec { typ: u8, data: &'a [u8] },
+    Rec {
+        typ: u8,
+        data: Vec<u8>,
+        physical_offset: u64,
+    },
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor};
+    use std::io::Cursor;
 
     // Minimal reporter that records corruption events.
     #[derive(Default)]
@@ -382,7 +386,7 @@ mod tests {
         // FIRST payload fills the rest of the block exactly, LAST in next block.
         let first_frag_payload = BLOCK_SIZE - HEADER_SIZE; // fills a block with header
         log.extend(phys(2, &vec![b'y'; first_frag_payload])); // FIRST
-        log.extend(phys(4, &vec![b'z'; 10]));                 // LAST
+        log.extend(phys(4, &vec![b'z'; 10])); // LAST
 
         let cursor = Cursor::new(log);
         let rep = CollectingReporter::default();
@@ -423,7 +427,7 @@ mod tests {
         let first_frag_payload = BLOCK_SIZE - HEADER_SIZE;
         let second_start = log.len(); // offset where FIRST of A will begin
         log.extend(phys(2, &vec![b'a'; first_frag_payload])); // FIRST
-        log.extend(phys(4, &vec![b'a'; 10]));                 // LAST
+        log.extend(phys(4, &vec![b'a'; 10])); // LAST
 
         // Then a small FULL "B"
         log.extend(phys(1, b"B"));

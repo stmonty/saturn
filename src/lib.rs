@@ -1,8 +1,9 @@
 pub mod common;
 // pub mod saturndb;
 pub mod memtable;
+mod wal_reader;
+pub mod wal;
 pub mod wal_writer;
-// pub mod wal_reader;
 pub mod wal_format;
 pub mod crc;
 // pub mod sstable;
