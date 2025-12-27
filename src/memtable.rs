@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::common::{Key, Value, SequenceNumber};
+use crate::common::{Key, SequenceNumber, Value};
 
 pub trait MemTableBackend {
     fn insert(&mut self, key: Key, val: (Value, SequenceNumber));
@@ -14,14 +14,20 @@ pub struct MemTable {
     map: BTreeMap<Key, (Value, SequenceNumber)>,
     pub tombstones: BTreeMap<Key, SequenceNumber>,
     pub current_sequence_number: SequenceNumber,
+    max_entries: usize,
 }
 
 impl MemTable {
     pub fn new() -> Self {
+        Self::with_capacity(1000)
+    }
+
+    pub fn with_capacity(max_entries: usize) -> Self {
         Self {
             map: BTreeMap::new(),
             tombstones: BTreeMap::new(),
             current_sequence_number: 0,
+            max_entries,
         }
     }
 
@@ -41,10 +47,15 @@ impl MemTable {
     }
 
     pub fn is_full(&self) -> bool {
-        self.map.len() + self.tombstones.len() >= 1000
+        self.map.len() + self.tombstones.len() >= self.max_entries
     }
 
-    pub fn flush(&mut self) -> (BTreeMap<Key, (Value, SequenceNumber)>, BTreeMap<Key, SequenceNumber>) {
+    pub fn flush(
+        &mut self,
+    ) -> (
+        BTreeMap<Key, (Value, SequenceNumber)>,
+        BTreeMap<Key, SequenceNumber>,
+    ) {
         let data = std::mem::replace(&mut self.map, BTreeMap::new());
         let tombstones = std::mem::replace(&mut self.tombstones, BTreeMap::new());
         (data, tombstones)

@@ -82,6 +82,28 @@ impl SSTable {
         Ok(SSTable::new(file_path, index, bloom_filter))
     }
 
+    pub fn open<P: AsRef<Path>>(file_path: P) -> std::io::Result<SSTable> {
+        let mut file = File::open(&file_path)?;
+        let mut index = BTreeMap::new();
+        let mut bloom_filter = BloomFilter::default();
+
+        loop {
+            let offset = file.seek(SeekFrom::Current(0))?;
+            let entry = match read_entry_optional(&mut file)? {
+                Some(entry) => entry,
+                None => break,
+            };
+            let key = match entry {
+                Entry::Put { key, .. } => key,
+                Entry::Delete { key } => key,
+            };
+            index.insert(key.clone(), offset);
+            bloom_filter.add(&key);
+        }
+
+        Ok(SSTable::new(file_path, index, bloom_filter))
+    }
+
     pub fn get(&self, key: &Key) -> std::io::Result<Option<(Value, SequenceNumber)>> {
         if !self.bloom_filter.contains(key) {
             return Ok(None);
@@ -97,6 +119,18 @@ impl SSTable {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn iter_entries(&self) -> std::io::Result<Vec<Entry>> {
+        let mut file = File::open(&self.file_path)?;
+        let mut entries = Vec::new();
+        loop {
+            match read_entry_optional(&mut file)? {
+                Some(entry) => entries.push(entry),
+                None => break,
+            }
+        }
+        Ok(entries)
     }
 }
 
@@ -142,6 +176,42 @@ pub fn read_entry<R: Read>(reader: &mut R) -> std::io::Result<Entry> {
             "Invalid entry type",
         )),
     }
+}
+
+fn read_entry_optional<R: Read>(reader: &mut R) -> std::io::Result<Option<Entry>> {
+    let mut type_byte = [0u8; 1];
+    match reader.read_exact(&mut type_byte) {
+        Ok(()) => {}
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::UnexpectedEof {
+                return Ok(None);
+            }
+            return Err(err);
+        }
+    }
+    let mut seq_bytes = [0u8; 8];
+    reader.read_exact(&mut seq_bytes)?;
+    let key = read_bytes(reader).ok_or(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        "Invalid key",
+    ))?;
+    let entry = match type_byte[0] {
+        0 => {
+            let value = read_bytes(reader).ok_or(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid value",
+            ))?;
+            Entry::Put { key, value }
+        }
+        1 => Entry::Delete { key },
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid entry type",
+            ))
+        }
+    };
+    Ok(Some(entry))
 }
 
 #[cfg(test)]

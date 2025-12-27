@@ -40,7 +40,8 @@ impl BloomFilter {
     }
 
     fn hash2(&self, key: &Key) -> usize {
-        key.iter().fold(0, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize))
+        key.iter()
+            .fold(0, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as usize))
     }
 }
 
@@ -67,11 +68,7 @@ mod tests {
     #[test]
     fn test_bloom_filter_add_and_contains() {
         let mut bf = BloomFilter::default();
-        let keys: Vec<Key> = vec![
-            b"apple".to_vec(),
-            b"banana".to_vec(),
-            b"cherry".to_vec(),
-        ];
+        let keys: Vec<Key> = vec![b"apple".to_vec(), b"banana".to_vec(), b"cherry".to_vec()];
 
         for key in &keys {
             bf.add(key);
@@ -81,14 +78,14 @@ mod tests {
             assert!(bf.contains(key), "Bloom Filter should contain {:?}", key);
         }
 
-        let non_keys: Vec<Key> = vec![
-            b"durian".to_vec(),
-            b"elderberry".to_vec(),
-            b"fig".to_vec(),
-        ];
+        let non_keys: Vec<Key> = vec![b"durian".to_vec(), b"elderberry".to_vec(), b"fig".to_vec()];
 
         for key in &non_keys {
-            assert!(!bf.contains(key), "Bloom Filter should not contain {:?}", key);
+            assert!(
+                !bf.contains(key),
+                "Bloom Filter should not contain {:?}",
+                key
+            );
         }
     }
 }

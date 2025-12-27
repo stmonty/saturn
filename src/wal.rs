@@ -40,6 +40,17 @@ impl WriteAheadLog {
         WriteAheadLogIter::new(&self.path)
     }
 
+    pub fn reset(&mut self) -> io::Result<()> {
+        let file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .open(&self.path)?;
+        self.writer = Writer::with_starting_offset(file, 0);
+        Ok(())
+    }
+
     pub fn into_inner(self) -> File {
         self.writer.into_inner()
     }
